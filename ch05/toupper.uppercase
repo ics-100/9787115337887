@@ -1,0 +1,202 @@
+# 目的：        本程序将输入文件的所有字母转换为大写字母, 然后输出到输出文件
+
+# 处理过程:  1) 打开输入文件
+#            2) 打开输出文件
+#            3) 如果未达到输入文件的尾部
+#               A): 将部分文件读入内存缓冲区
+#               B): 读取内存缓冲区的每个字节，如果该字节为小写字母，就将其转换为大写字母
+#               C): 将内存缓冲区写入文件
+
+ .SECTION .DATA
+#### 常数 #####
+
+ # 系统调用号
+ .EQU SYS_OPEN, 5
+ .EQU SYS_WRITE, 4
+ .EQU SYS_READ, 3
+ .EQU SYS_CLOSE, 6
+ .EQU SYS_EXIT, 1
+
+ #  文件打开选项(不同的值请参见/USR/INCLUDE/ASM/FCNTL.H ）
+ # 你可以通过将选择值相加或者进行OR操作组合使用选项
+ # 这将在 10.1.2 中深入阐述
+ .EQU O_RDONLY, 0
+ .EQU O_CREATE_WRONLY_TRUNC, 03101
+
+ # 标准文件描述符
+ .EQU STDIN, 0
+ .EQU STDOUT, 1
+ .EQU STDERR, 2
+
+ # 系统调用中断
+ .EQU LINUX_SYSCALL, 0X80
+
+ .EQU END_OF_FILE, 0         # 这是读操作的返回值, 表明到达文件结束处
+ .EQU NUMBER_ARGUMENTS, 2
+
+ .SECTION .BSS
+ # 缓冲区 - 缓冲区不应超过 16000字节
+  .EQU BUFFER_SIZE, 500
+  .LCOMM BUFFER_DATA, BUFFER_SIZE
+
+ .SECTION .TEXT
+
+ # 栈位置(ST: STACK OPTION)
+ .EQU ST_SIZE_RESERVE, 8
+ .EQU ST_FD_IN, -4
+ .EQU ST_FD_OUT, -8
+ .EQU ST_ARGC, 0            # 参数数目
+ .EQU ST_ARGV_0, 4          # 程序名
+ .EQU ST_ARGV_1, 8          # 输入文件名
+ .EQU ST_ARGV_2, 12         # 输出文件名
+
+
+
+ .GLOBL _START
+_START:
+ ### 程序初始化 ###
+ # 保存栈指针
+ MOVL %ESP, %EBP
+
+ # 在栈上为文件描述符分配空间
+ SUBL $ST_SIZE_RESERVE, %ESP
+
+
+OPEN_FILES:
+OPEN_FD_IN:
+ ### 打开输入文件 ###
+ MOVL $SYS_OPEN, %EAX
+ MOVL ST_ARGV_1(%EBP), %EBX
+ MOVL $O_RDONLY, %ECX
+ MOVL $0666, %EDX
+ INT $LINUX_SYSCALL
+
+STORE_FD_IN:
+ #  保存给定的文件描述符
+ MOVL %EAX, ST_FD_IN(%EBP)
+
+OPEN_FD_OUT:
+ ### 打开输出文件 ###
+ MOVL $SYS_OPEN, %EAX
+ MOVL ST_ARGV_2(%EBP), %EBX
+ MOVL $O_CREATE_WRONLY_TRUNC, %ECX
+ MOVL $0666, %EDX
+ INT $LINUX_SYSCALL
+
+STORE_FD_OUT:
+ # 这里存储文件描述符
+ MOVL %EAX, ST_FD_OUT(%EBP)
+
+### 主循环开始####
+READ_LOOP_BEGIN:
+ MOVL $SYS_READ, %EAX
+ MOVL ST_FD_IN(%EBP), %EBX
+ MOVL $BUFFER_DATA, %ECX
+ MOVL $BUFFER_SIZE, %EDX
+ INT $LINUX_SYSCALL
+
+ ### 如果到达文件结束处就退出
+ CMPL $END_OF_FILE, %EAX
+ JLE END_LOOP
+
+CONTINUE_READ_LOOP:
+ # 将字符块内容转换大小写内容
+ PUSHL $BUFFER_DATA          # 缓冲区位置
+ PUSHL %EAX                  # 缓冲区大小
+ CALL CONVERT_TO_UPPER
+ POPL %EAX                   # 重新获取大小
+ ADDL $4, %ESP               # 恢复 %ESP
+
+ ### 将字符块写入输出文件###
+ # 缓冲区大小
+ MOVL %EAX, %EDX
+ MOVL $SYS_WRITE, %EAX
+ # 要使用的文件
+ MOVL ST_FD_OUT(%EBP),  %EBX
+ # 缓冲区位置
+ MOVL $BUFFER_DATA, %ECX
+ INT $LINUX_SYSCALL
+
+ ### 继续循环###
+ JMP READ_LOOP_BEGIN
+
+
+
+END_LOOP:
+ ### 关闭文件###
+ MOVL $SYS_CLOSE, %EAX
+ MOVL ST_FD_OUT(%EBP), %EBX
+ INT  $LINUX_SYSCALL
+
+ MOVL $SYS_CLOSE, %EAX
+ MOVL ST_FD_IN(%EBP), %EBX
+ INT  $LINUX_SYSCALL
+
+ ### 退出###
+ MOVL $SYS_EXIT, %EAX
+ MOVL $0, %EBX
+ INT  $LINUX_SYSCALL
+
+
+# 目的: 这个函数实际上将字符块内容转换为大写形式
+#
+# 输入:  第一个参数是要转换的内存块的位置
+#        第二个参数是缓冲区的长度
+#
+# 输出: 这个函数以大写字符块覆盖当前缓冲区
+#
+# 变量: 
+#       %EAX - 缓冲区的起始地址
+#       %EBX - 缓冲区长度
+#       %EDI - 当前缓冲区偏移量
+#       %CL  - 当前正在检测的字节(%ECX的第一部分)
+
+ ### 常数 ###
+ # 我们搜索的下边界
+ .EQU LOWERCASE_A, 'A'
+ # 我们搜索的上边界
+ .EQU LOWERCASE_Z, 'Z'
+ # 大小写转换
+ .EQU UPPER_CONVERSION, 'A' - 'A'
+
+ ### 栈相关信息###
+ .EQU ST_BUFFER_LEN, 8      # 缓冲区长度
+ .EQU ST_BUFFER, 12         # 实际缓冲区
+
+CONVERT_TO_UPPER:
+ PUSHL %EBP
+ MOVL %ESP, %EBP
+
+ ### 设置变量###
+ MOVL ST_BUFFER(%EBP), %EAX
+ MOVL ST_BUFFER_LEN(%EBP), %EBX
+ MOVL $0, %EDI
+
+ # 如果给定的缓冲区长度为0及离开
+ CMPL $0, %EBX
+ JE END_CONVERT_LOOP
+
+CONVERT_LOOP:
+ # 获取当前字节
+ MOVB (%EAX, %EDI, 1), %CL
+
+ # 除非该字节在'A'和'Z'之间，否则读取下一个字节
+ CMPB $LOWERCASE_A, %CL
+ JL NEXT_BYTE
+ CMPB $LOWERCASE_Z, %CL
+ JG NEXT_BYTE
+
+ # 否则将字节转换为大写字母
+ ADDB $UPPER_CONVERSION, %CL
+ # 并存回原处
+ MOVB %CL, (%EAX, %EDI, 1)
+NEXT_BYTE:
+ INCL %EDI
+ CMPL %EDI, %EBX
+ JNE CONVERT_LOOP
+
+END_CONVERT_LOOP:
+ # 无返回值，离开程序即可
+ MOVL %EBP, %ESP
+ POPL %EBP
+ RET

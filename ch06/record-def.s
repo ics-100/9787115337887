@@ -1,0 +1,11 @@
+# 姓 40字节
+# 名 40字节
+# 地址 240字节
+# 年龄 4字节
+
+.equ RECORD_FIRSTNAME, 0
+.equ RECORD_LASTNAME, 40
+.equ RECORD_ADDRESS, 80
+.equ RECORD_AGE, 320
+
+.equ RECORD_SIZE, 324
