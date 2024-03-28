@@ -1,26 +1,5 @@
-## 深入理解程序设计-使用Linux汇编语言
+# 深入理解程序设计-使用Linux汇编语言
 
-[https://book.douban.com/subject/25789594/](https://book.douban.com/subject/25789594/)
-
-
-### 开发环境
-
-* [`vagrant`](https://www.vagrantup.com/)
-* [`xenial-server-cloudimg-i386-vagrant.box`](https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cloud-images/xenial/current/xenial-server-cloudimg-i386-vagrant.box)
-
-### 汇编器
-
-* [GNU汇编器 - GAS](https://zh.wikipedia.org/wiki/GNU%E6%B1%87%E7%BC%96%E5%99%A8)
-
-
-
-**调试研究**
-
-* `readelf -a exit.o`
-* `hexdump -C exit.o`
-* `objdump -d exit.o`
-
-**目录**
 
 * [x] [第 1 章 引言](./ch01)
 * [x] [第 2 章 计算机体系结构](./ch02)
@@ -35,3 +14,8 @@
 * [x] [第 11 章 高级语言](./ch11)
 * [x] [第 12 章 优化](./ch12)
 * [x] [第 13 章 学无止境](./ch13)
+
+
+## Ref
+
+* <https://book.douban.com/subject/25789594/>
